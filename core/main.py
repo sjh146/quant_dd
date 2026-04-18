@@ -1,7 +1,7 @@
 import os
 import time
 import logging
-from infra.kafka_client import QuantKafkaConsumer, QuantKafkaProducer
+from infra.redis_pubsub import QuantRedisConsumer, QuantRedisProducer
 from infra.db_client import DBManager
 from agents.pipeline import PipelineManager
 from core.strategy_engine import StrategyEngine
@@ -12,19 +12,16 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Starting AI Trading System (Ubuntu Node)...")
     
-    # Environment Variables
-    KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     MARKET_DATA_TOPIC = "market.data"
     SIGNAL_TRADE_TOPIC = "signal.trade"
 
-    logger.info(f"Connecting to Kafka broker: {KAFKA_BROKER}")
+    logger.info(f"Connecting to Redis for Pub/Sub: {REDIS_URL}")
     
-    # 1. Initialize Connections
-    consumer = QuantKafkaConsumer(broker_url=KAFKA_BROKER, topic=MARKET_DATA_TOPIC)
-    producer = QuantKafkaProducer(broker_url=KAFKA_BROKER)
+    consumer = QuantRedisConsumer(redis_url=REDIS_URL, channel=MARKET_DATA_TOPIC)
+    producer = QuantRedisProducer(redis_url=REDIS_URL)
     db_manager = DBManager()
     
-    # 2. Initialize Core Logic Engines
     pipeline = PipelineManager()
     strategy_engine = StrategyEngine()
 

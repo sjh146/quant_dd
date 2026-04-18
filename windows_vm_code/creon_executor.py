@@ -108,49 +108,43 @@ class CreonExecutionEngine:
 
 def main():
     # In Windows, point this to the Ubuntu VM's IP address
-    KAFKA_BROKER = os.getenv('KAFKA_BROKER', '192.168.x.x:9092') 
+    REDIS_URL = os.getenv('REDIS_URL', 'redis://192.168.0.50:6379/0') 
     TOPIC = 'signal.trade'
     
-    logger.info(f"Starting Execution Node. Connecting to Kafka: {KAFKA_BROKER}")
-    
-    conf = {
-        'bootstrap.servers': KAFKA_BROKER,
-        'group.id': 'windows_execution_group',
-        'auto.offset.reset': 'latest' # Only execute NEW orders
-    }
-    
-    consumer = Consumer(conf)
-    consumer.subscribe([TOPIC])
-    engine = CreonExecutionEngine()
-    
-    logger.info(f"Listening for execution signals on topic: {TOPIC}...")
+    logger.info(f"Starting Execution Node. Connecting to Redis: {REDIS_URL}")
     
     try:
-        while True:
-            msg = consumer.poll(1.0)
-            if msg is None:
-                continue
-            if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    continue
-                else:
-                    logger.error(f"Kafka Error: {msg.error()}")
-                    continue
-            
-            try:
-                signal_data = json.loads(msg.value().decode('utf-8'))
-                logger.info(f"Received Signal from AI System: {signal_data}")
-                
-                # Execute the trade via Creon API
-                engine.execute_order(signal_data)
-                
-            except json.JSONDecodeError:
-                logger.error("Failed to parse message")
-                
+        redis_client = redis.from_url(REDIS_URL)
+        pubsub = redis_client.pubsub()
+        pubsub.subscribe(TOPIC)
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis: {e}")
+        return
+
+    engine = CreonExecutionEngine()
+    
+    logger.info(f"Listening for execution signals on Redis channel: {TOPIC}...")
+    
+    try:
+        for msg in pubsub.listen():
+            if msg['type'] == 'message':
+                try:
+                    signal_data = json.loads(msg['data'].decode('utf-8'))
+                    logger.info(f"Received Signal from AI System: {signal_data}")
+                    
+                    # Execute the trade via Creon API
+                    engine.execute_order(signal_data)
+                    
+                except json.JSONDecodeError:
+                    logger.error("Failed to parse message")
+                except Exception as e:
+                    logger.error(f"Error during order execution: {e}")
+                    
     except KeyboardInterrupt:
         logger.info("Shutting down Execution Node...")
     finally:
-        consumer.close()
+        pubsub.close()
+        redis_client.close()
 
 if __name__ == "__main__":
     main()

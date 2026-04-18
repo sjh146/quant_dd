@@ -1,6 +1,5 @@
 pandas
 numpy
-confluent-kafka
 psycopg2-binary
 redis
 SQLAlchemy
