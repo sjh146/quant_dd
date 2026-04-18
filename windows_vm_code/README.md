@@ -13,13 +13,13 @@
    pip install -r requirements.txt
    ```
 
-3. **Kafka 브로커 IP 설정**
-   `creon_executor.py` 내부의 `KAFKA_BROKER` 주소를 우분투 머신의 실제 IP 주소로 변경하세요.
+3. **Redis 브로커 IP 설정**
+   `creon_executor.py` 내부의 `REDIS_URL` 주소를 우분투 머신의 실제 IP 주소로 변경하세요.
    ```python
    # creon_executor.py
-   KAFKA_BROKER = os.getenv('KAFKA_BROKER', '192.168.0.50:9092') # <-- 우분투 IP로 수정
+   REDIS_URL = os.getenv('REDIS_URL', 'redis://192.168.0.50:6379/0') # <-- 우분투 IP로 수정
    ```
-   *(참고: 우분투의 방화벽(UFW 등)에서 9092 포트가 열려있어야 합니다.)*
+   *(참고: 우분투의 방화벽(UFW 등)에서 6379 포트가 열려있어야 합니다.)*
 
 4. **크레온(Creon Plus) 로그인**
    - 크레온 플러스를 실행하고 **"CYBOS Plus"** 모드로 로그인합니다.
@@ -32,6 +32,6 @@
    ```
 
 ## 🔄 동작 방식
-1. 코드가 실행되면 우분투에 떠 있는 Kafka의 `signal.trade` 토픽을 실시간으로 구독합니다.
+1. 코드가 실행되면 우분투에 떠 있는 Redis의 `signal.trade` 채널(Pub/Sub)을 실시간으로 구독합니다.
 2. AI 시스템(우분투)이 시그널(예: `{"action": "BUY", "symbol": "005930", "quantity": 33}`)을 발송하면,
 3. 윈도우 파이썬이 이를 수신하여 `CpTrade.CpTd0311` (주식 주문 COM 객체)를 통해 대신증권 서버로 **시장가 매수(03)** 주문을 꽂아 넣습니다.
