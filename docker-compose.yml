@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: quant_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-quant_user}
+      POSTGRES_PASSWORD: ${DB_PASS:-quant_pass}
+      POSTGRES_DB: ${DB_NAME:-quant_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Redis for fast caching and in-memory features (orderbook snapshots, tensors)
+  redis:
+    image: redis:7
+    container_name: quant_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  # Zookeeper for Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: quant_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+
+  # Kafka Message Broker
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: quant_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+  # Kafka Topic Initialization (market.data, signal.trade)
+  kafka-init:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      echo -e 'Waiting for Kafka to be ready...'
+      sleep 10
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic market.data --replication-factor 1 --partitions 3
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic signal.trade --replication-factor 1 --partitions 1
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic log.system --replication-factor 1 --partitions 1
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka:29092 --list
+      "
+
+  # AI Trading Ubuntu Agent Layer
+  ai_agents:
+    build: .
+    container_name: quant_ai_agents
+    depends_on:
+      - kafka
+      - postgres
+      - redis
+    environment:
+      - KAFKA_BROKER=kafka:29092
+      - REDIS_URL=redis://redis:6379/0
+      - DB_URL=postgresql://quant_user:quant_pass@postgres:5432/quant_db
+    volumes:
+      - .:/app
+    command: tail -f /dev/null  # Keep container alive for development
+
+volumes:
+  postgres_data:
+  redis_data:
