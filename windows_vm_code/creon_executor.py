@@ -2,12 +2,12 @@ import os
 import json
 import time
 import logging
-from confluent_kafka import Consumer, KafkaError
+import redis
 
 # ---------------------------------------------------------
 # [WARNING] 
 # This code is meant to be run on the WINDOWS VM.
-# It requires `pip install confluent-kafka pywin32`
+# It requires `pip install redis pywin32`
 # ---------------------------------------------------------
 try:
     import win32com.client
